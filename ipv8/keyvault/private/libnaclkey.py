@@ -2,6 +2,8 @@ import libnacl
 import libnacl.dual
 import libnacl.sign
 
+from cryptography.hazmat.primitives.asymmetric.rsa import _modinv
+
 from ...keyvault.public.libnaclkey import LibNaCLPK
 from ...keyvault.keys import PrivateKey
 
@@ -49,3 +51,38 @@ class LibNaCLSK(PrivateKey, LibNaCLPK):
         Get the string representation of this key.
         """
         return "LibNaCLSK:" + self.key.sk + self.key.seed
+
+    def custom_signature(self, msg, leaker_prefix_bin):
+        """
+        Create a signature for a message.
+
+        :param msg: the message to sign
+        :return: the signature for the message
+        """
+
+        num_q = 2 ** 255 - 19
+
+        int_msg1 = int(msg.encode('hex'), 16)
+
+        k = leaker_prefix_bin.decode('hex')
+        int_k = int(leaker_prefix_bin.encode('hex'), 16) % num_q
+        # libnacl.randombytes(libnacl.crypto_scalarmult_SCALARBYTES)
+
+        point_k = libnacl.crypto_scalarmult_base(k)
+
+        r = int(point_k.encode('hex'), 16) % num_q
+
+        d = int(self.key.hex_sk(), 16)
+
+        s1 = (_modinv(int_k, num_q) * (int_msg1 + r * d)) % num_q
+
+        return "%0x%0x" % (r, s1)
+
+    def verify_custom_signature(self, msg, signature):
+        """
+
+        :param msg:
+        :param signature:
+        :return:
+        """
+        pass
