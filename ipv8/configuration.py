@@ -13,7 +13,7 @@ default = {
         }
     ],
     'logger': {
-        'level': "ERROR"
+        'level': "DEBUG"
     },
     'walker_interval': 0.5,
     'overlays': [
@@ -25,7 +25,7 @@ default = {
                     'strategy': "RandomWalk",
                     'peers': -1,
                     'init': {
-                        'timeout': 3.0
+                        'timeout': 60.0
                     }
                 },
                 {
@@ -33,9 +33,9 @@ default = {
                     'peers': -1,
                     'init': {
                         'sample_size': 64,
-                        'ping_interval': 1.0,
-                        'inactive_time': 1.0,
-                        'drop_time': 3.0
+                        'ping_interval': 10.0,
+                        'inactive_time': 45.0,
+                        'drop_time': 60.0
                     }
                 },
                 {
