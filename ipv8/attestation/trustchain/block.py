@@ -36,6 +36,8 @@ class TrustChainBlock(object):
             self.signature = EMPTY_SIG
             # debug stuff
             self.insert_time = None
+            # double signature
+            self.double_signature = None
         else:
             _, self.transaction = decode(str(data[0]))
             (self.public_key, self.sequence_number, self.link_public_key, self.link_sequence_number, self.previous_hash,
@@ -48,6 +50,8 @@ class TrustChainBlock(object):
                 self.previous_hash = str(self.previous_hash)
             if isinstance(self.signature, buffer):
                 self.signature = str(self.signature)
+            # if self.transaction.startswith('64s'):
+            #     self.double_signature = self.transaction[3:64]
         self.serializer = serializer
 
     @classmethod
@@ -301,6 +305,17 @@ class TrustChainBlock(object):
         """
         crypto = ECCrypto()
         self.signature = crypto.create_signature(key, self.pack(signature=False))
+        # If the user is signing his new block, the he also adds a signature for double signing.
+        self.double_signature = None
+
+        signature1 = crypto.create_custom_signature(key, self.pack(signature=False), self.public_key)
+        signature2 = crypto.create_custom_signature(key, self.pack(signature=True), self.public_key)
+        verified1 = crypto.verify_custom_signature(signature1, self.pack(signature=False))
+        verified2 = crypto.verify_custom_signature(signature2, self.pack(signature=True))
+        print "verified:", verified1
+        print "verified:", verified2
+
+        crypto.recover_double_signature(signature1, signature2, self.pack(signature=False), self.pack(signature=True))
 
     @classmethod
     def create(cls, transaction, database, public_key, link=None, link_pk=None):

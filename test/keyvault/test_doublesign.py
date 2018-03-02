@@ -5,10 +5,9 @@ from os import urandom
 
 from ipv8.keyvault import curve25519
 from ipv8.keyvault.crypto import ECCrypto
-# from ipv8.keyvault.curve25519 import scalarmult_base, scalarmult, add_points, double_point, unpack, pack, x_point
 
 
-class TestCurve25519(unittest.TestCase):
+class TestDoubleSign(unittest.TestCase):
     """
     Test whether two signatures can be exploited to derive the private key.
     """
@@ -16,6 +15,7 @@ class TestCurve25519(unittest.TestCase):
     def setUp(self):
         self.ec = ECCrypto()
         self.data = "".join([chr(i) for i in range(256)])
+        self.key = self.ec.generate_key(u"very-low")
         key_bin = "4c69624e61434c534b3a9fab25fdea70f6ffb9185fabf26f1d6c7d796e989" \
                   "dcaf083a900501e263c526898bbd08da7895dae4b72d0d216c8a0fcfcea34" \
                   "98c0871e651ac13562db445098"

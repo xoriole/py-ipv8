@@ -1,7 +1,14 @@
 import logging
+from binascii import unhexlify, hexlify
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+
+from cryptography.hazmat.primitives.hashes import SHA256
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from ipv8.keyvault.doublesign import SECP256k1
 from ..keyvault.keys import Key
 from .private.libnaclkey import LibNaCLSK
 from .private.m2crypto import M2CryptoSK
@@ -31,6 +38,9 @@ class ECCrypto(object):
     However since then, most functionality was completely rewritten by:
         @author: Niels Zeilemaker
     """
+    def __init__(self):
+        super(ECCrypto, self).__init__()
+        self.ecdsa = SECP256k1()
 
     @property
     def security_levels(self):
@@ -132,3 +142,77 @@ class ECCrypto(object):
             return ec.verify(signature, data)
         except:
             return False
+
+    def create_custom_signature(self, ec, data, common_base):
+        """
+        Returns a Sec256k1 signature to prevent double spending.
+        """
+        msg_digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        msg_digest.update(data)
+        digest1 = msg_digest.finalize()
+
+        common_digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        common_digest.update(common_base)
+        digest2 = common_digest.finalize()
+
+        int_key = int(ec.key.hex_sk(), 16)
+        int_digest = int(digest1.encode('hex'), 16)
+        int_common = int(digest2.encode('hex'), 16)
+
+        print "private key: %0x" % int_key
+
+        (r,s) = self.ecdsa.sign(int_digest, int_key, int_common)
+        signature = self.pack32(r.value)+self.pack32(s.value)
+        return signature
+
+    def verify_custom_signature(self, signature, data):
+        length = len(signature) / 2
+        r = self.unpack32(signature[:length])
+        s = self.unpack32(signature[length:])
+
+        msg_digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        msg_digest.update(data)
+        digest1 = msg_digest.finalize()
+        int_digest = int(digest1.encode('hex'), 16)
+
+        pubkey = self.ecdsa.pubkey_from_signature(int_digest, r, s, 0)
+        return self.ecdsa.verify(int_digest, pubkey, r, s)
+
+    def recover_double_signature(self, signature1, signature2, data1, data2):
+        if len(signature1) != len(signature2):
+            print "Invalid signatures"
+            return
+        length = len(signature1)/2
+
+        r1 = self.unpack32(signature1[:length])
+        s1 = self.unpack32(signature1[length:])
+        r2 = self.unpack32(signature2[:length])
+        s2 = self.unpack32(signature2[length:])
+
+        if r1 != r2:
+            print "Cannot recover private key from these signatures (r1 =/= r2)"
+            return
+
+        data1_digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        data1_digest.update(data1)
+        int_data1 = int(data1_digest.finalize().encode('hex'), 16)
+
+        data2_digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+        data2_digest.update(data2)
+        int_data2 = int(data2_digest.finalize().encode('hex'), 16)
+
+        (secret, private_key) = self.ecdsa.recover_from_double_signature(r1, s1, s2, int_data1, int_data2)
+        print "secret:", secret
+        print "private key:", private_key
+
+    # Equivalent to RFC7748 decodeUCoordinate followed by decodeLittleEndian
+    def unpack32(self, s):
+        if len(s) != 32:
+            raise ValueError('Invalid Curve25519 scalar (len=%d)' % len(s))
+        t = sum(ord(s[i]) << (8 * i) for i in range(31))
+        t += ((ord(s[31]) & 0x7f) << 248)
+        return t
+
+
+    def pack32(self, n):
+        return ''.join([chr((n >> (8 * i)) & 255) for i in range(32)])

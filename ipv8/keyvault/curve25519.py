@@ -15,8 +15,8 @@ def cswap(swap, x_2, x_3):
     """
     Constant time swapping resistant against side channel attacks.
     :param swap: Swap or not
-    :param x_2: Value 1
-    :param x_3: Value 2
+    :param x_2: FieldElement 1
+    :param x_3: FieldElement 2
     :return: Returns swapped tuple
     """
     dummy = swap * ((x_2 - x_3) % P)
@@ -109,7 +109,7 @@ def clamp(n):
     n &= ~7
     n &= ~(128 << 8 * 31)
     n |= 64 << 8 * 31
-    return n
+    return n % P
 
 
 def scalarmult(n, p):
@@ -123,6 +123,16 @@ def scalarmult(n, p):
     p = unpack(p)
     return pack(X25519(n, p))
 
+def scalarmult_unclamped(n, p):
+    """
+    Multiplies group element p by integer n.
+    :param n: Scalar value (32-byte string)
+    :param p: Group element point (32-byte string)
+    :return: Returns the resulting group element as 32-byte string.
+    """
+    n = unpack(n)
+    p = unpack(p)
+    return pack(X25519(n, p))
 
 def scalarmult_base(n):
     """
@@ -131,6 +141,15 @@ def scalarmult_base(n):
     :return: Returns the resulting group element as 32-byte string.
     """
     n = clamp(unpack(n))
+    return pack(X25519(n, 9))
+
+def scalarmult_base_unclamped(n):
+    """
+    Computes scalar product of standard group element (9) and n.
+    :param n: Scalar value (32-byte string)
+    :return: Returns the resulting group element as 32-byte string.
+    """
+    n = unpack(n)
     return pack(X25519(n, 9))
 
 
@@ -152,8 +171,8 @@ def calculate_y(x):
 def subtract_points(p1, p2):
     """
     Subtract two points (p1 - p2)
-    :param p1: Point 1 (32-byte string)
-    :param p2: Point 2 (32-byte string)
+    :param p1: ECPoint 1 (32-byte string)
+    :param p2: ECPoint 2 (32-byte string)
     :return: Returns 32-byte string: p1 + p2
     """
     p1 = unpack(p1)
@@ -164,8 +183,8 @@ def subtract_points(p1, p2):
 def add_points(p1, p2):
     """
     Adds two points (p1 + p2)
-    :param p1: Point 1 (32-byte string)
-    :param p2: Point 2 (32-byte string)
+    :param p1: ECPoint 1 (32-byte string)
+    :param p2: ECPoint 2 (32-byte string)
     :return: Returns 32-byte string: p1 + p2
     """
     p1 = unpack(p1)
@@ -178,7 +197,7 @@ def add_points(p1, p2):
 def double_point(p1):
     """
     Doubles the point (2 * p1)
-    :param p1: Point 1 (32-byte string)
+    :param p1: ECPoint 1 (32-byte string)
     :return: Returns 32-byte string: 2 * p1
     """
     p1 = unpack(p1)
@@ -230,7 +249,7 @@ def x_point(x_int, p1):
     """
     Computes the scalar multiplication on the given point.
     :param x_int: Scalar value (integer)
-    :param p1: Point P1 (32-byte string)
+    :param p1: ECPoint P1 (32-byte string)
     :return: Returns the point after scalar multiplication
     """
     p = unpack(p1)
@@ -323,6 +342,71 @@ def custom_signature(sk, msg, common_base):
 
     r = unpack(point_k)
     s = (_modinv(k_unpacked, P) * (z_unpacked + r * d)) % P
+    inv_s = _modinv(s, P)
+    # print "inv s:", pack(inv_s).encode('hex')
+
+    w = _modinv(s, P)
+    print "inv s:", pack(w).encode('hex')
+    u1 = z_unpacked * w % P
+    u2 = r * w % P
+    u3 = r * w * d % P
+    print "r:", point_k.encode('hex')
+    print "u2:", u2
+
+    pk = scalarmult_base(sk)
+    print "pk:", pk.encode('hex')
+    u1_point = scalarmult_base(pack(u1))
+    u2_point = scalarmult_unclamped(pack(u2), pk)
+    u3_point = scalarmult_base(pack(u3))
+
+    print "u1 point:", u1_point.encode('hex')
+    print "u2 point:", u2_point.encode('hex')
+    print "u3 point:", u3_point.encode('hex')
+
+    sum = add_points(u1_point, u2_point)
+    print "sum:", sum.encode('hex')
+
+    return "%s%s" % (point_k, pack(s))
+
+
+def double_signature(sk, msg, common_base):
+    """
+    Custom signature for Curve25519
+    :param msg:
+    :param common_base:
+    :return:
+    """
+    d = unpack(sk)
+    z_unpacked = unpack(msg)
+    k_unpacked = unpack(common_base)
+
+    point_k = scalarmult_base(common_base)
+
+    r = clamp(unpack(point_k))
+    s = (_modinv(k_unpacked, P) * (z_unpacked + r * d)) % P
+    inv_s = _modinv(s, P)
+    # print "inv s:", pack(inv_s).encode('hex')
+
+    w = _modinv(s, P)
+    print "inv s:", pack(w).encode('hex')
+    u1 = z_unpacked * w % P
+    u2 = r * w % P
+    u3 = r * w * d % P
+    print "r:", point_k.encode('hex')
+    print "u2:", u2
+
+    pk = scalarmult_base(sk)
+    print "pk:", pk.encode('hex')
+    u1_point = scalarmult_base(pack(u1))
+    u2_point = scalarmult_unclamped(pack(u2), pk)
+    u3_point = scalarmult_base(pack(u3))
+
+    print "u1 point:", u1_point.encode('hex')
+    print "u2 point:", u2_point.encode('hex')
+    print "u3 point:", u3_point.encode('hex')
+
+    sum = add_points(u1_point, u2_point)
+    print "sum:", sum.encode('hex')
 
     return "%s%s" % (pack(r), pack(s))
 
@@ -335,6 +419,7 @@ def verify_custom_signature(pk, msg, signature, common_base):
     :param common_base:
     :return:
     """
+    print "pk:", pk.encode('hex')
     z_unpacked = unpack(msg)
 
     r_packed = signature[:32]
@@ -344,9 +429,26 @@ def verify_custom_signature(pk, msg, signature, common_base):
     s = unpack(s_packed)
 
     w = _modinv(s, P)
+    print "inv s:", pack(w).encode('hex')
     u1 = z_unpacked * w % P
     u2 = r * w % P
+    print "r:", r
+    print "u2:", u2
 
-    r1 = add_points(scalarmult_base(pack(u1)), scalarmult(pack(u2), pk))
+    u1_point = scalarmult_base(pack(u1))
+    u2_point = scalarmult(pack(u2), pk)
+
+    print "u1 point:", u1_point.encode('hex')
+    print "u2 point:", u2_point.encode('hex')
+
+    sum = add_points(u1_point, u2_point)
+    print "sum:", sum.encode('hex')
+
+    r1 = add_points(u1_point, u2_point)
+    r1 = add_points(u2_point, u1_point)
+    r2 = subtract_points(u1_point, u2_point)
     print "r1: ", r1.encode('hex')
+    print "r2: ", r2.encode('hex')
     print "r : ", r_packed.encode('hex')
+
+

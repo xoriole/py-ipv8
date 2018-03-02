@@ -1,3 +1,4 @@
+import ctypes
 import libnacl
 import libnacl.dual
 import libnacl.sign
@@ -52,7 +53,7 @@ class LibNaCLSK(PrivateKey, LibNaCLPK):
         """
         return "LibNaCLSK:" + self.key.sk + self.key.seed
 
-    def custom_signature(self, msg, leaker_prefix_bin):
+    def custom_signature(self, msg, common_base):
         """
         Create a signature for a message.
 
@@ -64,11 +65,11 @@ class LibNaCLSK(PrivateKey, LibNaCLPK):
 
         int_msg1 = int(msg.encode('hex'), 16)
 
-        k = leaker_prefix_bin.decode('hex')
-        int_k = int(leaker_prefix_bin.encode('hex'), 16) % num_q
+        # k = leaker_prefix_bin.decode('hex')
+        int_k = int(common_base.encode('hex'), 16) % num_q
         # libnacl.randombytes(libnacl.crypto_scalarmult_SCALARBYTES)
 
-        point_k = libnacl.crypto_scalarmult_base(k)
+        point_k = libnacl.crypto_scalarmult_base(common_base)
 
         r = int(point_k.encode('hex'), 16) % num_q
 
@@ -78,11 +79,31 @@ class LibNaCLSK(PrivateKey, LibNaCLPK):
 
         return "%0x%0x" % (r, s1)
 
-    def verify_custom_signature(self, msg, signature):
+    def verify_custom_signature(self, msg, signature, common_base):
         """
-
         :param msg:
         :param signature:
         :return:
         """
-        pass
+        r_hex = signature[:64]
+        s_hex = signature[64:]
+
+        num_q = 2 ** 255 - 19
+
+        z_int = int(common_base.encode('hex'), 16)
+        r_int = int(r_hex, 16)
+        s_int = int(s_hex, 16)
+        d_int = int(self.key.sk.encode('hex'), 16)
+
+        w_int = _modinv(s_int, num_q)
+
+        u1_int = (z_int * w_int) % num_q
+        u2_int = (r_int * w_int) % num_q
+
+
+
+
+        multiplier = ((_modinv(s_int, num_q)) * (z_int + r_int * d_int)) % num_q
+        multiplier_hex = "%0x" % multiplier
+        x_bin = libnacl.crypto_scalarmult_base(multiplier_hex.decode('hex'))
+        print "x1:", x_bin.encode('hex')
