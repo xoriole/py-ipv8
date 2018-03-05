@@ -39,9 +39,14 @@ class IdentityCommunity(TrustChainCommunity, BlockListener):
     def should_sign(self, block):
         transaction = block.transaction
         requested_keys = set(transaction.keys())
-        if requested_keys - {"hash", "name", "date", "metadata"} != set():
-            return False
-        if requested_keys - {"metadata"} != {"hash", "name", "date"}:
+# <<<<<<< HEAD
+#         if requested_keys - {"hash", "name", "date", "metadata"} != set():
+#             return False
+#         if requested_keys - {"metadata"} != {"hash", "name", "date"}:
+# =======
+        required_keys = set(["hash", "name", "date", "metadata"])
+        if not required_keys.issubset(requested_keys):
+# >>>>>>> debbbad... Double spending detection using Secp256k1 keys
             return False
         hash = transaction['hash']
         if hash not in self.known_attestation_hashes:
