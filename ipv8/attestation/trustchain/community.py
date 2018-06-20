@@ -72,6 +72,7 @@ class TrustChainCommunity(Community):
         self.listeners_map = {}  # Map of block_type -> [callbacks]
         self.db_cleanup_lc = self.register_task("db_cleanup", LoopingCall(self.do_db_cleanup))
         self.db_cleanup_lc.start(600)
+        self.listeners_map = {"*": []}  # Map of block_type -> [callbacks]
 
         self.decode_map.update({
             chr(1): self.received_half_block,
@@ -92,22 +93,27 @@ class TrustChainCommunity(Community):
             my_pk = self.my_peer.public_key.key_to_bin()
             self.persistence.remove_old_blocks(blocks_in_db - self.settings.max_db_blocks, my_pk)
 
-    def add_listener(self, listener, block_types):
+    def add_listener(self, listener, block_types=None):
         """
-        Add a listener for specific block types.
+        Add a listener for all blocks or specific block types.
         """
-        for block_type in block_types:
-            if block_type not in self.listeners_map:
-                self.listeners_map[block_type] = []
-            self.listeners_map[block_type].append(listener)
-            self.persistence.block_types[block_type] = listener.BLOCK_CLASS
+        if block_types:
+            for block_type in block_types:
+                if block_type not in self.listeners_map:
+                    self.listeners_map[block_type] = []
+                self.listeners_map[block_type].append(listener)
+                self.persistence.block_types[block_type] = listener.BLOCK_CLASS
+        else:
+            self.listeners_map["*"].append(listener)
 
-    def remove_listener(self, listener, block_types):
-        for block_type in block_types:
-            if block_type in self.listeners_map and listener in self.listeners_map[block_type]:
-                self.listeners_map[block_type].remove(listener)
-            if block_type in self.persistence.block_types:
-                self.persistence.block_types.pop(block_type, None)
+    def remove_listener(self, listener, block_types=None):
+        if block_types:
+            for block_type in block_types:
+                if block_type in self.listeners_map and listener in self.listeners_map[block_type]:
+                    self.listeners_map[block_type].remove(listener)
+        else:
+            if listener in self.listeners_map["*"]:
+                self.listeners_map["*"].remove(listener)
 
     def get_block_class(self, block_type):
         """
@@ -353,11 +359,18 @@ class TrustChainCommunity(Community):
         """
         Notify listeners of a specific new block.
         """
-        if block.type not in self.listeners_map or self.shutting_down:
+        if self.shutting_down:
+            return
+
+        for listener in self.listeners_map["*"]:
+            listener.received_block(block)
+
+        if block.type not in self.listeners_map:
             return
 
         for listener in self.listeners_map[block.type]:
             listener.received_block(block)
+
 
     @synchronized
     def process_half_block(self, blk, peer):
