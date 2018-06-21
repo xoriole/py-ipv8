@@ -21,6 +21,52 @@ class TrustchainEndpoint(BaseEndpoint):
             self.putChild(b"recent", TrustchainRecentEndpoint(trustchain_overlays[0]))
             self.putChild(b"blocks", TrustchainBlocksEndpoint(trustchain_overlays[0]))
             self.putChild(b"users", TrustchainUsersEndpoint(trustchain_overlays[0]))
+            self.putChild(b"statistics", TrustchainStatisticsEndpoint(trustchain_overlays[0]))
+            self.putChild(b"missing", TrustchainMissingEndpoint(trustchain_overlays[0]))
+
+
+class TrustchainStatisticsEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain):
+        super(TrustchainStatisticsEndpoint, self).__init__()
+        self.trustchain = trustchain
+
+        self.putChild("types", TrustchainStatisticsTypesEndpoint(self.trustchain))
+        self.putChild("block_creation", TrustChainStatisticsCreationEndpoint(self.trustchain))
+        self.putChild("interactions", TrustchainStatisticsInteractionsEndpoint(self.trustchain))
+
+    def render_GET(self, request):
+        return self.twisted_dumps({"statistics": self.trustchain.persistence.get_statistics()})
+
+
+class TrustchainStatisticsTypesEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain):
+        super(TrustchainStatisticsTypesEndpoint, self).__init__()
+        self.trustchain = trustchain
+
+    def render_GET(self, request):
+        return self.twisted_dumps({"types": self.trustchain.persistence.get_types_statistics()})
+
+
+class TrustChainStatisticsCreationEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain):
+        super(TrustChainStatisticsCreationEndpoint, self).__init__()
+        self.trustchain = trustchain
+
+    def render_GET(self, request):
+        return self.twisted_dumps({"statistics": self.trustchain.persistence.block_creation_statistics})
+
+
+class TrustchainStatisticsInteractionsEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain):
+        super(TrustchainStatisticsInteractionsEndpoint, self).__init__()
+        self.trustchain = trustchain
+
+    def render_GET(self, request):
+        return self.twisted_dumps({"interactions": self.trustchain.persistence.get_interactions()})
 
 
 class TrustchainRecentEndpoint(BaseEndpoint):
@@ -32,15 +78,23 @@ class TrustchainRecentEndpoint(BaseEndpoint):
     def render_GET(self, request):
         limit = 10
         offset = 0
+        max_time = 0
+        block_type = None
         if request.args and b'limit' in request.args:
             limit = int(request.args[b'limit'][0])
 
         if request.args and b'offset' in request.args:
             offset = int(request.args[b'offset'][0])
 
+        if request.args and b'maxtime' in request.args:
+            max_time = int(request.args[b'maxtime'][0])
+
+        if request.args and b'type' in request.args:
+            block_type = request.args[b'type'][0]
+
         return self.twisted_dumps({
             "blocks": [dict(block) for block in
-                       self.trustchain.persistence.get_recent_blocks(limit=limit, offset=offset)]
+                       self.trustchain.persistence.get_recent_blocks(limit=limit, offset=offset, max_time=max_time, block_type=block_type)]
         })
 
 
@@ -122,6 +176,9 @@ class TrustchainSpecificUserBlocksEndpoint(BaseEndpoint):
         except TypeError:
             self.pub_key = None
 
+    def getChild(self, path, request):
+        return TrustchainSpecificUserBlockEndpoint(self.trustchain, self.pub_key, path)
+
     def render_GET(self, request):
         if not self.pub_key:
             request.setResponseCode(http.NOT_FOUND)
@@ -141,3 +198,41 @@ class TrustchainSpecificUserBlocksEndpoint(BaseEndpoint):
             blocks_list.append(block_dict)
 
         return self.twisted_dumps({"blocks": blocks_list})
+
+
+class TrustchainSpecificUserBlockEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain, pub_key, seq_num):
+        super(TrustchainSpecificUserBlockEndpoint, self).__init__()
+        self.trustchain = trustchain
+        self.pub_key = pub_key
+        self.seq_num = int(seq_num)
+
+    def render_GET(self, request):
+        if not self.pub_key:
+            request.setResponseCode(http.NOT_FOUND)
+            return self.twisted_dumps({"error": "the user with the provided public key could not be found"})
+
+        block = self.trustchain.persistence.get(self.pub_key, self.seq_num)
+        if not block:
+            request.setResponseCode(http.NOT_FOUND)
+            return self.twisted_dumps({"error": "the block with the provided hash could not be found"})
+
+        block_dict = dict(block)
+
+        # Fetch the linked block if available
+        linked_block = self.trustchain.persistence.get_linked(block)
+        if linked_block:
+            block_dict["linked"] = dict(linked_block)
+
+        return self.twisted_dumps({"block": block_dict})
+
+
+class TrustchainMissingEndpoint(BaseEndpoint):
+
+    def __init__(self, trustchain):
+        super(TrustchainMissingEndpoint, self).__init__()
+        self.trustchain = trustchain
+
+    def render_GET(self, request):
+        return self.twisted_dumps({"missing": self.trustchain.persistence.get_missing_sequence_numbers()})
