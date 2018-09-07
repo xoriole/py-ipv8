@@ -14,6 +14,7 @@ ipv8/test/peerdiscovery/test_churn.py:TestChurn
 ipv8/test/keyvault/test_crypto.py:TestECCrypto
 ipv8/test/keyvault/test_serialization.py:TestSerialization
 ipv8/test/keyvault/test_signature.py:TestSignatures
+ipv8/test/keyvault/test_doublesign.py:TestDoubleSign
 
 ipv8/test/attestation/trustchain/test_community.py:TestTrustChainCommunity
 ipv8/test/attestation/trustchain/test_block.py:TestTrustChainBlock

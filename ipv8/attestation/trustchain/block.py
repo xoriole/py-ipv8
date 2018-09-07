@@ -350,7 +350,7 @@ class TrustChainBlock(object):
                 if linklinked is not None and linklinked.hash != self.hash:
                     result.err("Double countersign fraud")
                     if 'double_sig' in self.transaction and self.transaction['double_sig'] \
-                            and 'double_sig' in linklinked.transaction and linklinked.transaction['double_sig']:
+                            and 'double_sig' in linklinked.transaction and linklinked.transactino['double_sig']:
                         (sign_secret, private_key) = self.crypto.recover_double_signature(
                             self.transaction['double_sig'],
                             linklinked.transaction['double_sig'],

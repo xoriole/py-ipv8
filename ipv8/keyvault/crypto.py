@@ -2,7 +2,7 @@ import logging
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from ipv8.keyvault.doublesign import SECP256k1
+from ..keyvault.doublesign import SECP256k1
 from ..keyvault.keys import Key
 from .private.libnaclkey import LibNaCLSK
 from .private.m2crypto import M2CryptoSK
