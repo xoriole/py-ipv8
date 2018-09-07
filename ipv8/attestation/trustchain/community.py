@@ -53,6 +53,7 @@ class TrustChainCommunity(Community):
     def __init__(self, *args, **kwargs):
         working_directory = kwargs.pop('working_directory', '')
         db_name = kwargs.pop('db_name', self.DB_NAME)
+        self.double_spending_prevention = kwargs.pop('double_spending_prevention', False)
         super(TrustChainCommunity, self).__init__(*args, **kwargs)
         self.request_cache = RequestCache()
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -219,7 +220,9 @@ class TrustChainCommunity(Community):
                                                         self.my_peer.public_key.key_to_bin(),
                                                         link=linked, additional_info=additional_info,
                                                         link_pk=public_key)
-        block.sign(self.my_peer.key)
+
+        print "transaction:", block.transaction
+        block.sign(self.my_peer.key, double_spending_prevention=self.double_spending_prevention)
 
         validation = block.validate(self.persistence)
         self.logger.info("Signed block to %s (%s) validation result %s",

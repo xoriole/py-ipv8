@@ -139,7 +139,7 @@ class ECCrypto(object):
 
     def is_valid_double_signature(self, data, signature):
         """
-        Returns True if signature is valid
+        Returns True if signature is valid.
         """
         return self.ecdsa.custom_verify(data, signature)
 

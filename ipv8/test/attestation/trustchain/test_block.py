@@ -22,7 +22,7 @@ class TestBlock(TrustChainBlock):
 
         if previous:
             self.key = previous.key
-            TrustChainBlock.__init__(self, block_type, (encode(transaction), previous.public_key,
+            TrustChainBlock.__init__(self, (block_type, encode(transaction), previous.public_key,
                                                         previous.sequence_number + 1, other, 0, previous.hash, 0, 0, 0))
         else:
             if key:
@@ -424,7 +424,7 @@ class TestTrustChainBlock(unittest.TestCase):
         block2.link_public_key = "5678"
         block1.update_block_consistency(block2, result)
 
-        self.assertEqual(ValidationResult.invalid, result.state)
+        self.assertEqual(ValidationResult.double_spend, result.state)
 
     def test_block_consistency_link_sq(self):
         """
@@ -437,7 +437,7 @@ class TestTrustChainBlock(unittest.TestCase):
         block2.link_sequence_number = 1
         block1.update_block_consistency(block2, result)
 
-        self.assertEqual(ValidationResult.invalid, result.state)
+        self.assertEqual(ValidationResult.double_spend, result.state)
 
     def test_block_consistency_previous_hash(self):
         """
@@ -450,7 +450,7 @@ class TestTrustChainBlock(unittest.TestCase):
         block2.previous_hash = "5678"
         block1.update_block_consistency(block2, result)
 
-        self.assertEqual(ValidationResult.invalid, result.state)
+        self.assertEqual(ValidationResult.double_spend, result.state)
 
     def test_block_consistency_signature(self):
         """
@@ -463,20 +463,21 @@ class TestTrustChainBlock(unittest.TestCase):
         block2.signature = "5678"
         block1.update_block_consistency(block2, result)
 
-        self.assertEqual(ValidationResult.invalid, result.state)
+        self.assertEqual(ValidationResult.double_spend, result.state)
 
     def test_block_consistency_hash(self):
         """
         Test for error on hash mismatch.
         """
         result = ValidationResult()
-        block1 = TestBlock()
-        block1.pack = lambda: "1234"
-        block2 = TestBlock()
-        block2.pack = lambda: "5678"
+        key = ECCrypto().generate_key(u"curve25519")
+        block1 = TestBlock(key=key)
+        block1.pack = lambda **kw: "1234"
+        block2 = TestBlock(key=key)
+        block2.pack = lambda **kw: "5678"
         block1.update_block_consistency(block2, result)
 
-        self.assertEqual(ValidationResult.invalid, result.state)
+        self.assertEqual(ValidationResult.double_spend, result.state)
 
     def test_link_consistency_key(self):
         """
@@ -796,11 +797,12 @@ class TestTrustChainBlock(unittest.TestCase):
         new_block = TestBlock(previous=block2)
 
         # # Validation should detect double spend and recover the private key of the signer.
-        # validation = new_block.validate(db)
-        # self.assertEqual(validation[0], ValidationResult.double_spend)
-        # self.assertIn("Double sign fraud", validation[1])
+        validation = new_block.validate(db)
+        self.assertEqual(validation[0], ValidationResult.double_spend)
+        self.assertIn("Double sign fraud", validation[1])
+        print "validation:", validation
         #
-        # # Check equality of the private keys
-        # recovered_private_key = validation[2][1]
-        # self.assertEqual(key.key.sk, recovered_private_key, "Recovered private key did not match.")
+        # Check equality of the private keys
+        recovered_private_key = validation[2][1]
+        self.assertEqual(key.key.sk, recovered_private_key, "Recovered private key did not match.")
 

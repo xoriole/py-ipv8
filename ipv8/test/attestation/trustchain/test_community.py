@@ -456,7 +456,7 @@ class TestTrustChainCommunity(TestBase):
         self.assertIsNotNone(self.nodes[0].overlay.persistence.get(my_pubkey, 1))
         self.assertIsNotNone(self.nodes[1].overlay.persistence.get(my_pubkey, 1))
 
-    @twisted_wrapper
+    @twisted_wrapper(1000000)
     def test_half_block_link_block(self):
         """
         Test creating and disseminating a link block
@@ -475,6 +475,7 @@ class TestTrustChainCommunity(TestBase):
         block = self.nodes[1].overlay.persistence.get(source_peer_pubkey, 1)
         self.assertIsNotNone(block)
 
+        print "here----"
         # Create a Link Block
         yield self.nodes[1].overlay.create_link(block, block_type='link', additional_info={'a': 1, 'b': 2})
         yield self.deliver_messages()
@@ -486,5 +487,6 @@ class TestTrustChainCommunity(TestBase):
         self.assertIsNotNone(block_node_0)
         self.assertIsNotNone(block_node_1)
 
-        self.assertEqual(decode(block_node_0.transaction)[1], {'a': 1, 'b': 2})
-        self.assertEqual(decode(block_node_1.transaction)[1], {'a': 1, 'b': 2})
+        print block_node_0.transaction
+        self.assertEqual(block_node_0.transaction, {'a': 1, 'b': 2})
+        self.assertEqual(block_node_1.transaction, {'a': 1, 'b': 2})

@@ -42,6 +42,7 @@ class TrustChainBlock(object):
             self.insert_time = None
         else:
             _, self.transaction = decode(str(data[1]))
+            print "transaction in init:", self.transaction
             (self.type, self.public_key, self.sequence_number, self.link_public_key, self.link_sequence_number,
              self.previous_hash, self.signature, self.timestamp, self.insert_time) = (data[0], data[2], data[3],
                                                                                       data[4], data[5], data[6],
@@ -129,7 +130,9 @@ class TrustChainBlock(object):
         :param signature: False to pack EMPTY_SIG in the signature location, true to pack the signature field
         :return: the buffer the data was packed into
         """
-        raw_transaction = {i:self.transaction[i] for i in self.transaction if i != 'double_sig'}
+        print "transaction:", self.transaction
+        print "type:", type(self.transaction)
+        raw_transaction = {key: value for key, value in self.transaction.iteritems() if key != 'double_sig'}
         args = [self.public_key, self.sequence_number, self.link_public_key, self.link_sequence_number,
                 self.previous_hash, self.signature if signature else EMPTY_SIG, self.type, raw_transaction,
                 self.timestamp]
@@ -176,7 +179,7 @@ class TrustChainBlock(object):
         # Check if the chain of blocks is properly hooked up.
         self.update_chain_consistency(prev_blk, next_blk, result)
 
-        return result.state, result.errors
+        return result.state, result.errors, result.extras
 
     def update_validation_level(self, prev_blk, next_blk, result):
         """
@@ -311,7 +314,7 @@ class TrustChainBlock(object):
             # if the known block is not equal, and the signatures are valid, we have a double signed PK/seq. Fraud!
             if self.hash != blk.hash and "Invalid signature" not in result.errors and \
                     "Public key is not valid" not in result.errors:
-                result.err("Double sign fraud", double_spend=True)
+                result.err("Double sign fraud", is_double_spend=True)
                 if 'double_sig' in self.transaction and self.transaction['double_sig'] \
                     and 'double_sig' in blk.transaction and blk.transaction['double_sig']:
                     (sign_secret, private_key) = self.crypto.recover_double_signature(self.transaction['double_sig'],
@@ -350,7 +353,7 @@ class TrustChainBlock(object):
                 if linklinked is not None and linklinked.hash != self.hash:
                     result.err("Double countersign fraud")
                     if 'double_sig' in self.transaction and self.transaction['double_sig'] \
-                            and 'double_sig' in linklinked.transaction and linklinked.transactino['double_sig']:
+                            and 'double_sig' in linklinked.transaction and linklinked.transaction['double_sig']:
                         (sign_secret, private_key) = self.crypto.recover_double_signature(
                             self.transaction['double_sig'],
                             linklinked.transaction['double_sig'],
@@ -394,7 +397,7 @@ class TrustChainBlock(object):
                 result.err("Next hash is not equal to the hash id of the block")
                 # Again, this might not be fraud, but fixing it can only result in fraud.
 
-    def sign(self, key):
+    def sign(self, key, double_spending_prevention=False):
         """
         Signs this block with the given key
         :param key: the key to sign this block with
@@ -403,9 +406,11 @@ class TrustChainBlock(object):
         self.signature = self.crypto.create_signature(key, data)
 
         # Attach custom double signature to the transaction itself
-        sign_secret = doublesign.sha256("%s%s" % (key, self.block_id))
-        if self.transaction and isinstance(self.transaction, dict):
-            self.transaction['double_sig'] = self.crypto.create_custom_signature(key.key.hex_sk(), data, sign_secret)
+        if double_spending_prevention:
+            sign_secret = doublesign.sha256("%s%s" % (key, self.block_id))
+            if self.transaction and isinstance(self.transaction, dict):
+                self.transaction['double_sig'] = self.crypto.create_custom_signature(key.key.hex_sk(),
+                                                                                     data, sign_secret)
 
     @classmethod
     def create(cls, block_type, transaction, database, public_key, link=None, additional_info=None, link_pk=None):
@@ -425,7 +430,7 @@ class TrustChainBlock(object):
         ret = cls()
         if link:
             ret.type = link.type
-            ret.transaction = link.transaction if additional_info is None else encode(additional_info)
+            ret.transaction = link.transaction if additional_info is None else additional_info
             ret.link_public_key = link.public_key
             ret.link_sequence_number = link.sequence_number
         else:
@@ -520,6 +525,13 @@ class ValidationResult(object):
         """
         pass
 
+    @staticmethod
+    def double_spend():
+        """
+        The block is a double spent one
+        """
+        pass
+
     def __init__(self):
         """
         Create a new ValidationResult instance with valid state and no errors.
@@ -540,11 +552,3 @@ class ValidationResult(object):
         self.errors.append(reason)
         if self.state != ValidationResult.double_spend:
             self.state = ValidationResult.double_spend if is_double_spend else ValidationResult.invalid
-
-    @staticmethod
-    def double_spend():
-        """
-        The block violates at least one validation rule
-        """
-        pass
-
