@@ -322,10 +322,13 @@ class TrustChainDB(Database):
             })
         return block_types_info
 
-    def get_recent_blocks(self, limit=10, offset=0):
+    def get_recent_blocks(self, limit=10, offset=0, max_time=0):
         """
         Return the most recent blocks in the TrustChain database.
         """
+        if max_time:
+            max_time += 5000  # Some tolerance
+            return self._getall(u"WHERE block_timestamp <= ? ORDER BY block_timestamp DESC LIMIT ? OFFSET ?", (max_time, limit, offset))
         return self._getall(u"ORDER BY block_timestamp DESC LIMIT ? OFFSET ?", (limit, offset))
 
     def get_users(self, limit=100):
