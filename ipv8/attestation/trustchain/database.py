@@ -71,7 +71,7 @@ class TrustChainDB(Database):
         # Get the average transaction rate
         self.tx_rate = list(self.execute(u"SELECT COUNT()/(24.0*3600.0) FROM blocks WHERE "
                                          u"block_timestamp >= CAST((julianday('now') - 2440587.5)*86400000-24*3600*1000 AS INTEGER) "
-                                         u"AND block_timestamp <= CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER)"))[0]
+                                         u"AND block_timestamp <= CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER)"))[0][0]
 
     def get_block_class(self, block_type):
         """
