@@ -91,7 +91,7 @@ class TrustchainRecentEndpoint(resource.Resource):
             max_time = int(request.args['maxtime'][0])
 
         if request.args and 'type' in request.args:
-            block_type = int(request.args['type'][0])
+            block_type = request.args['type'][0]
 
         return json.dumps({"blocks": [dict(block) for block in
                                       self.trustchain.persistence.get_recent_blocks(limit=limit, offset=offset, max_time=max_time, block_type=block_type)]})
