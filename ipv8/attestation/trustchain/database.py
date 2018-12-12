@@ -358,7 +358,7 @@ class TrustChainDB(Database):
         else:
             query = u"ORDER BY block_timestamp DESC LIMIT ? OFFSET ?", (limit, offset)
 
-        return self._getall(query)
+        return self._getall(*query)
 
     def get_users(self, limit=100):
         """
