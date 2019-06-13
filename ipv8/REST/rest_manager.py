@@ -32,7 +32,7 @@ class RESTManager(TaskManager):
         self.root_endpoint = RootEndpoint(self.session)
         site = server.Site(resource=self.root_endpoint)
         site.requestFactory = RESTRequest
-        self.site = reactor.listenTCP(port, site, interface="127.0.0.1")
+        self.site = reactor.listenTCP(port, site, interface="0.0.0.0")
 
     def stop(self):
         """
