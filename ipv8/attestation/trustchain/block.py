@@ -1,20 +1,21 @@
 from __future__ import absolute_import
 
-from binascii import hexlify
-from hashlib import sha256
 import time
+from binascii import hexlify
+from collections import namedtuple
+from hashlib import sha256
 
-from six import string_types
+from six import binary_type
 
+from .payload import HalfBlockPayload
 from ...database import database_blob
 from ...keyvault.crypto import default_eccrypto
 from ...messaging.deprecated.encoding import decode, encode
 from ...messaging.serialization import default_serializer
-from .payload import HalfBlockPayload
 from ...util import old_round
 
 
-GENESIS_HASH = b'0' * 32    # ID of the first block of the chain.
+GENESIS_HASH = b'0' * 32  # ID of the first block of the chain.
 GENESIS_SEQ = 1
 UNKNOWN_SEQ = 0
 EMPTY_SIG = b'0' * 64
@@ -26,8 +27,73 @@ class TrustChainBlock(object):
     """
     Container for TrustChain block information
     """
+    Data = namedtuple('Data', ['type',
+                               'transaction',
+                               'public_key',
+                               'sequence_number',
+                               'link_public_key',
+                               'link_sequence_number',
+                               'previous_hash',
+                               'signature',
+                               'timestamp',
+                               'insert_time'])
+    """
+    Data struct to initialize a TrustChainBlock.
+
+
+        **[0] type:** The block type name, as utf-8 string or utf-8 encoded bytes.
+
+        *> type:* str or bytes
+
+        **[1] transaction:** Metadata dictionary, consisting of binary type strings.
+
+        *> type:* dict
+
+        **[2] public_key:** The serialized public key of the initiator of this block (binary data).
+
+        *> type:* bytes (Py3) or str (Py2)
+
+        **[3] sequence_number:** The the sequence number of this block in the chain of the intiator of this block.
+
+        *> type:* int
+
+        **[4] link_public_key:** The serialized public key of the counterparty of this block (binary data).
+
+        *> type:* bytes (Py3) or str (Py2)
+
+        **[5] link_sequence_number:** The height of this block in the chain of the counterparty of this block,
+        or 0 if unknown.
+
+        *> type:* int
+
+        **[6] previous_hash:** The hash of the previous block in the chain of the initiator of this block (binary data).
+
+        *> type:* bytes (Py3) or str (Py2)
+
+        **[7] signature:** The signature of the initiator of this block for this block (binary data).
+
+        *> type:* bytes (Py3) or str (Py2)
+
+        **[8] timestamp:** The time in milliseconds since the UNIX epoch when this block was created
+        (according to the initiator).
+
+        *> type:* int
+
+        **[9] insert_time:** The time in milliseconds since the UNIX epoch when this block was inserted into the local
+        database (according to the local database), if this block was inserted into the local database.
+
+        *> type:* int or None
+    """
 
     def __init__(self, data=None, serializer=default_serializer):
+        """
+        Create a new TrustChainBlock or load a TrustChainBlock from an existing database entry.
+
+        :param data: Optional data to initialize this block with.
+        :type data: TrustChainBlock.Data or list
+        :param serializer: An optional custom serializer to use for this block.
+        :type serializer: Serializer
+        """
         super(TrustChainBlock, self).__init__()
         self.serializer = serializer
         if data is None:
@@ -48,19 +114,19 @@ class TrustChainBlock(object):
             # debug stuff
             self.insert_time = None
         else:
-            self._transaction = data[1] if isinstance(data[1], bytes) else str(data[1])
+            self._transaction = data[1] if isinstance(data[1], bytes) else binary_type(data[1])
             _, self.transaction = decode(self._transaction)
             (self.type, self.public_key, self.sequence_number, self.link_public_key, self.link_sequence_number,
              self.previous_hash, self.signature, self.timestamp, self.insert_time) = (data[0], data[2], data[3],
                                                                                       data[4], data[5], data[6],
                                                                                       data[7], data[8], data[9])
-            self.type = self.type if isinstance(self.type, bytes) else str(self.type)
-            self.public_key = self.public_key if isinstance(self.public_key, bytes) else str(self.public_key)
+            self.type = self.type if isinstance(self.type, bytes) else str(self.type).encode('utf-8')
+            self.public_key = self.public_key if isinstance(self.public_key, bytes) else binary_type(self.public_key)
             self.link_public_key = (self.link_public_key if isinstance(self.link_public_key, bytes)
-                                    else str(self.link_public_key))
+                                    else binary_type(self.link_public_key))
             self.previous_hash = (self.previous_hash if isinstance(self.previous_hash, bytes)
-                                  else str(self.previous_hash))
-            self.signature = self.signature if isinstance(self.signature, bytes) else str(self.signature)
+                                  else binary_type(self.previous_hash))
+            self.signature = self.signature if isinstance(self.signature, bytes) else binary_type(self.signature)
         self.hash = self.calculate_hash()
         self.crypto = default_eccrypto
 
@@ -120,7 +186,7 @@ class TrustChainBlock(object):
 
     @property
     def is_genesis(self):
-        return self.sequence_number == GENESIS_SEQ or self.previous_hash == GENESIS_HASH
+        return self.sequence_number == GENESIS_SEQ and self.previous_hash == GENESIS_HASH
 
     @property
     def hash_number(self):
@@ -445,8 +511,8 @@ class TrustChainBlock(object):
         for key, value in self.__dict__.items():
             if key == 'key' or key == 'serializer' or key == 'crypto' or key == '_transaction':
                 continue
-            if isinstance(value, string_types) and key != "insert_time" and key != "type":
-                yield key, hexlify(value)
+            if isinstance(value, binary_type) and key != "insert_time" and key != "type":
+                yield key, hexlify(value).decode('utf-8')
             else:
                 yield key, value
 

@@ -9,6 +9,7 @@ from binascii import hexlify
 from six import text_type
 
 from .block import TrustChainBlock
+from ...attestation.trustchain.blockcache import BlockCache
 from ...database import Database, database_blob
 
 DATABASE_DIRECTORY = os.path.join(u"sqlite")
@@ -22,12 +23,13 @@ class TrustChainDB(Database):
     """
     LATEST_DB_VERSION = 7
 
-    def __init__(self, working_directory, db_name):
+    def __init__(self, working_directory, db_name, my_pk=None):
         """
         Sets up the persistence layer ready for use.
         :param working_directory: Path to the working directory
         that will contain the the db at working directory/DATABASE_PATH
         :param db_name: The name of the database
+        :param my_pk: The public key of this user, used for caching purposes
         """
         if working_directory != u":memory:":
             db_path = os.path.join(working_directory, os.path.join(DATABASE_DIRECTORY, u"%s.db" % db_name))
@@ -37,6 +39,11 @@ class TrustChainDB(Database):
         self._logger.debug("TrustChain database path: %s", db_path)
         self.db_name = db_name
         self.block_types = {}
+        self.my_blocks_cache = None
+        if my_pk:
+            self.my_pk = my_pk
+            self.my_blocks_cache = BlockCache(self, my_pk)
+
         self.open()
 
     def get_block_class(self, block_type):
@@ -59,6 +66,9 @@ class TrustChainDB(Database):
             block.pack_db_insert())
         self.commit()
 
+        if self.my_blocks_cache and (block.public_key == self.my_pk or block.link_public_key == self.my_pk):
+            self.my_blocks_cache.add(block)
+
     def remove_block(self, block):
         """
         DANGER! USING THIS WILL LIKELY CAUSE A DOUBLE-SPEND IN THE NETWORK.
@@ -76,11 +86,15 @@ class TrustChainDB(Database):
 
     def _get(self, query, params):
         db_result = list(self.execute(self.get_sql_header() + query, params, fetch_all=False))
-        return self.get_block_class(db_result[0])(db_result) if db_result else None
+        db_block_class = None
+        if db_result:
+            db_block_class = db_result[0] if isinstance(db_result[0], bytes) else str(db_result[0]).encode('utf-8')
+        return self.get_block_class(db_block_class)(db_result) if db_result else None
 
     def _getall(self, query, params):
         db_result = list(self.execute(self.get_sql_header() + query, params, fetch_all=True))
-        return [self.get_block_class(db_item[0])(db_item) for db_item in db_result]
+        return [self.get_block_class(db_item if isinstance(db_item, bytes)
+                                     else str(db_item).encode('utf-8'))(db_item) for db_item in db_result]
 
     def get(self, public_key, sequence_number):
         """
@@ -260,14 +274,18 @@ class TrustChainDB(Database):
                                                           block.sequence_number))
 
     def crawl(self, public_key, start_seq_num, end_seq_num, limit=100):
-        query = u"SELECT * FROM (%s WHERE sequence_number >= ? AND sequence_number <= ? AND public_key = ? LIMIT ?) " \
-                u"UNION SELECT * FROM (%s WHERE link_sequence_number >= ? AND link_sequence_number <= ? AND " \
-                u"link_sequence_number != 0 AND link_public_key = ? LIMIT ?)" % \
-                (self.get_sql_header(), self.get_sql_header())
-        db_result = list(self.execute(query, (start_seq_num, end_seq_num, database_blob(public_key), limit,
-                                              start_seq_num, end_seq_num, database_blob(public_key), limit),
-                                      fetch_all=True))
-        return [self.get_block_class(db_item[0])(db_item) for db_item in db_result]
+        if self.my_blocks_cache and public_key == self.my_pk:
+            # We are requesting blocks in our own chain, use the block cache.
+            return self.my_blocks_cache.get_range(start_seq_num, end_seq_num)
+        else:
+            query = u"SELECT * FROM (%s WHERE sequence_number >= ? AND sequence_number <= ? AND public_key = ? " \
+                    u"LIMIT ?) UNION SELECT * FROM (%s WHERE link_sequence_number >= ? AND link_sequence_number <= ? " \
+                    u"AND link_sequence_number != 0 AND link_public_key = ? LIMIT ?)" % \
+                    (self.get_sql_header(), self.get_sql_header())
+            db_result = list(self.execute(query, (start_seq_num, end_seq_num, database_blob(public_key), limit,
+                                                  start_seq_num, end_seq_num, database_blob(public_key), limit),
+                                          fetch_all=True))
+            return [self.get_block_class(db_item[0])(db_item) for db_item in db_result]
 
     def get_recent_blocks(self, limit=10, offset=0):
         """

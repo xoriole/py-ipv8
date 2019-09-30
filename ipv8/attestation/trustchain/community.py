@@ -47,7 +47,7 @@ class TrustChainCommunity(Community):
     master_peer = Peer(unhexlify("4c69624e61434c504b3a5730f52156615ecbcedb36c442992ea8d3c26b418edd8bd00e01dce26028cd"
                                  "1ebe5f7dce59f4ed59f8fcee268fd7f1c6dc2fa2af8c22e3170e00cdecca487745"))
 
-    UNIVERSAL_BLOCK_LISTENER = 'UNIVERSAL_BLOCK_LISTENER'
+    UNIVERSAL_BLOCK_LISTENER = b'UNIVERSAL_BLOCK_LISTENER'
     DB_CLASS = TrustChainDB
     DB_NAME = 'trustchain'
     version = b'\x02'
@@ -60,7 +60,7 @@ class TrustChainCommunity(Community):
         super(TrustChainCommunity, self).__init__(*args, **kwargs)
         self.request_cache = RequestCache()
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.persistence = self.DB_CLASS(working_directory, db_name)
+        self.persistence = self.DB_CLASS(working_directory, db_name, self.my_peer.public_key.key_to_bin())
         self.relayed_broadcasts = []
         self.logger.debug("The trustchain community started with Public Key: %s",
                           hexlify(self.my_peer.public_key.key_to_bin()))
@@ -256,7 +256,7 @@ class TrustChainCommunity(Community):
 
         # This is a source block with no counterparty
         if not peer and public_key == ANY_COUNTERPARTY_PK:
-            if self.settings.broadcast_blocks:
+            if block.type not in self.settings.block_types_bc_disabled:
                 self.send_block(block)
             return succeed((block, None))
 
@@ -264,12 +264,12 @@ class TrustChainCommunity(Community):
         self.send_block(block, address=peer.address)
 
         # We broadcast the block in the network if we initiated a transaction
-        if self.settings.broadcast_blocks and not linked:
+        if block.type not in self.settings.block_types_bc_disabled and not linked:
             self.send_block(block)
 
         if peer == self.my_peer:
             # We created a self-signed block
-            if self.settings.broadcast_blocks:
+            if block.type not in self.settings.block_types_bc_disabled:
                 self.send_block(block)
 
             return succeed((block, None)) if public_key == ANY_COUNTERPARTY_PK else succeed((block, linked))
@@ -280,7 +280,7 @@ class TrustChainCommunity(Community):
             return sign_deferred
         else:
             # We return a deferred that fires immediately with both half blocks.
-            if self.settings.broadcast_blocks:
+            if block.type not in self.settings.block_types_bc_disabled:
                 self.send_block_pair(linked, block)
 
             return succeed((linked, block))
@@ -413,7 +413,7 @@ class TrustChainCommunity(Community):
                 return self.sign_block(peer, linked=blk)
 
         # determine if we want to sign this block
-        return addCallback(self.should_sign(blk), on_should_sign_outcome)
+        return addCallback(maybeDeferred(self.should_sign, blk), on_should_sign_outcome)
 
     def crawl_chain(self, peer, latest_block_num=0):
         """

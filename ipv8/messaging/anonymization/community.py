@@ -225,7 +225,7 @@ class TunnelCommunity(Community):
 
     def do_remove(self):
         # Remove circuits that are inactive / are too old / have transferred too many bytes.
-        for circuit_id, circuit in self.circuits.items():
+        for circuit_id, circuit in list(self.circuits.items()):
             if circuit.state == CIRCUIT_STATE_READY and \
                circuit.last_activity < time.time() - self.settings.max_time_inactive:
                 self.remove_circuit(circuit_id, 'no activity')
@@ -235,14 +235,14 @@ class TunnelCommunity(Community):
                 self.remove_circuit(circuit_id, 'traffic limit exceeded')
 
         # Remove relays that are inactive / have transferred too many bytes.
-        for circuit_id, relay in self.relay_from_to.items():
+        for circuit_id, relay in list(self.relay_from_to.items()):
             if relay.last_activity < time.time() - self.settings.max_time_inactive:
                 self.remove_relay(circuit_id, 'no activity', both_sides=False)
             elif relay.bytes_up + relay.bytes_down > self.settings.max_traffic:
                 self.remove_relay(circuit_id, 'traffic limit exceeded', both_sides=False)
 
         # Remove exit sockets that are too old / have transferred too many bytes.
-        for circuit_id, exit_socket in self.exit_sockets.items():
+        for circuit_id, exit_socket in list(self.exit_sockets.items()):
             if exit_socket.last_activity < time.time() - self.settings.max_time_inactive:
                 self.remove_exit_socket(circuit_id, 'no activity')
             elif exit_socket.creation_time < time.time() - self.get_max_time(circuit_id):
@@ -312,7 +312,10 @@ class TunnelCommunity(Community):
             possible_first_hops = [required_exit]
         else:
             self.logger.info("Look for a first hop that is not an exit node and is not used before")
-            first_hops = set([c.peer.address for c in self.circuits.values() if c.peer])
+            # First build a list of hops, then filter the list. Avoids issues when create_circuit is called
+            # from a different thread (caused by circuit.peer being reset to None).
+            first_hops = [c.peer for c in self.circuits.values()]
+            first_hops = {h.address for h in first_hops if h}
             possible_first_hops = [c for c in relay_candidates if c.address not in first_hops
                                    and c.address != required_exit.address]
 
@@ -907,7 +910,7 @@ class TunnelCommunity(Community):
     def do_ping(self, exclude=None):
         # Ping circuits. Pings are only sent to the first hop, subsequent hops will relay the ping.
         exclude = [] if exclude is None else exclude
-        for circuit in self.circuits.values():
+        for circuit in list(self.circuits.values()):
             if circuit.state in [CIRCUIT_STATE_READY, CIRCUIT_STATE_EXTENDING] \
                     and circuit.circuit_id not in exclude \
                     and circuit.hops:
