@@ -89,10 +89,15 @@ class NoodleCommunity(Community):
         self.settings = kwargs.pop('settings', NoodleSettings())
         self.receive_block_lock = RLock()
         self.ipv8 = kwargs.pop('ipv8', None)
+
+        if 'persistence' in kwargs:
+            self.persistence = kwargs.pop('persistence')
+        else:
+            self.persistence = self.DB_CLASS(working_directory, db_name)
+
         super(NoodleCommunity, self).__init__(*args, **kwargs)
         self.request_cache = RequestCache()
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.persistence = self.DB_CLASS(working_directory, db_name, self.my_peer.public_key.key_to_bin())
         self.relayed_broadcasts = []
         self.logger.debug("The Noodle community started with Public Key: %s",
                           hexlify(self.my_peer.public_key.key_to_bin()))
@@ -1500,3 +1505,41 @@ class NoodleTestnetCommunity(NoodleCommunity):
 
     master_peer = Peer(unhexlify("4c69624e61434c504b3ad66fc4e9f6ee381fa5087670072c0de751060076c65a123f616092c7abc84"
                                  "11616b82a5d420f9f41307c742bc1457fb03dc7ae342bd8d3c1fe48191b7b44664b"))
+
+
+class NoodleCrawlerCommunity(NoodleCommunity):
+    """
+    Noodle community specifically for the crawler.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(NoodleCrawlerCommunity, self).__init__(*args, **kwargs)
+
+        self.crawl_lc = LoopingCall(self.crawl_peer)
+        self.crawl_lc.start(2)
+
+    def on_latest_block(self, peer, blocks):
+        his_block = None
+        if not blocks:
+            return
+
+        for block in blocks:
+            if block.public_key == peer.public_key.key_to_bin():
+                his_block = block
+                break
+
+        if his_block:
+            self._logger.info("Sending full crawl request to peer %s", peer)
+            self.crawl_chain(peer, his_block.sequence_number)
+
+    def crawl_peer(self):
+        """
+        Crawl a random peer.
+        """
+        tc_peers = self.get_peers()
+        if not tc_peers:
+            return
+
+        random_peer = random.choice(self.get_peers())
+        self.send_crawl_request(random_peer, random_peer.public_key.key_to_bin(), -1, -1).addCallbacks(
+            lambda blk: self.on_latest_block(random_peer, blk), lambda _: None)
