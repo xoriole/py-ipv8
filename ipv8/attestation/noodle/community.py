@@ -73,8 +73,8 @@ class NoodleCommunity(Community):
     """
     Community for secure payments.
     """
-    master_peer = Peer(unhexlify("4c69624e61434c504b3abbdfd630d79addbadf05006909d1ab80326f22d8d2f3ac66c0b7566ca4c0d"
-                                 "c6efe35f8a7a9d895d2d48430f0b91a5541e3447f816ecca0f50f3508118db9a405"))
+    master_peer = Peer(unhexlify("4c69624e61434c504b3a8ee895490330f77dae25fd6969d606d89e3d2cd86a9428e07e63caadbf17a"
+                                 "46a2e3c7125192292e85bc809313aba42dd208318ffd3b9941051cf7686f0a72fe6"))
     minter_peer = Peer(unhexlify("4c69624e61434c504b3a6ddcd9ce2c463c87b0899187975b9dc6322e193c7c891c7b6841015fa3b16"
                                  "40d7783a710053f551073271f511944e48d73fbb7928e3e0037f6611cf22a97e21f"))
 
@@ -213,6 +213,7 @@ class NoodleCommunity(Community):
 
         if not self.get_peers():
             self._logger.info("No peers to make a payment to.")
+            return
 
         rand_peer = random.choice(self.get_peers())
 
