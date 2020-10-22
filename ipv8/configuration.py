@@ -106,7 +106,10 @@ default = {
             'initialize': {},
             'on_start': []
         }
-    ]
+    ],
+    'crawler': {
+        'geodb': '/home/jupiter/tudelft/tribler/data/GeoLite2-Country.mmdb'
+    }
 }
 
 

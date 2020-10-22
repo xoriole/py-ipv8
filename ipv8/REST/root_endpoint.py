@@ -1,6 +1,7 @@
 from .asyncio_endpoint import AsyncioEndpoint
 from .attestation_endpoint import AttestationEndpoint
 from .base_endpoint import BaseEndpoint
+from .crawler_endpoint import CrawlerEndpoint
 from .dht_endpoint import DHTEndpoint
 from .identity_endpoint import IdentityEndpoint
 from .isolation_endpoint import IsolationEndpoint
@@ -27,6 +28,7 @@ class RootEndpoint(BaseEndpoint):
                      '/noblockdht': NoBlockDHTEndpoint,
                      '/overlays': OverlaysEndpoint,
                      '/trustchain': TrustchainEndpoint,
-                     '/tunnel': TunnelEndpoint}
+                     '/tunnel': TunnelEndpoint,
+                     '/crawler': CrawlerEndpoint}
         for path, ep_cls in endpoints.items():
             self.add_endpoint(path, ep_cls())
